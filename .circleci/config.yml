@@ -47,7 +47,7 @@ jobs:
       - checkout
       # Restore from cache
       - restore_cache:
-          keys: [frontend-build]
+          keys: [frontend-test]
       # Your job code here
       - run:
           name: Test Front end Code
@@ -55,6 +55,10 @@ jobs:
             cd frontend
             npm install
             npm run test
+      - save_cache:
+          paths:
+            - "frontend/node_modules"
+          key: frontend-test
 
   test-backend:
     docker:
@@ -65,7 +69,7 @@ jobs:
       - checkout
       # Restore from cache
       - restore_cache:
-          keys: [backend-build]
+          keys: [backend-test]
       # Your job code here
       - run:
           name: Test backend Code
@@ -73,7 +77,12 @@ jobs:
             cd backend
             npm install
             npm run test
-      
+
+      - save_cache:
+          paths:
+            - "backend/node_modules"
+          key: backend-test
+
 workflows:
   default:
     jobs:
