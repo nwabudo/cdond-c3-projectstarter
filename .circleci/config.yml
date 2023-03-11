@@ -289,14 +289,16 @@ jobs:
   run-migrations:
     docker:
       # Docker image here that supports NodeJS
-      - image: circleci/node:13.8.0
+      - image: cimg/python:3.10
     steps:
       # Checkout code from git
       - checkout
       # Restore from cache
       - install_awscli
+      - install_nodejs
       - restore_cache:
-          keys: [backend-cache]
+          keys:
+            - backend-cache-{{ checksum "backend/package-lock.json" }}
       - run:
           name: Run migrations
           command: |
@@ -304,10 +306,11 @@ jobs:
             cd backend
             npm install
             npm run migrations > migrations_dump.txt
-
+            cat migrations_dump.txt
+      
       - save_cache:
           paths: [backend/node_modules]
-          key: backend-migration-cache 
+          key: backend-cache-{{ checksum "backend/package-lock.json" }} 
 
       - run:
           name: Send migration results to kvdb
