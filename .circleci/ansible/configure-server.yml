@@ -38,7 +38,4 @@
     - TYPEORM_DATABASE: "{{ lookup('env', 'TYPEORM_DATABASE') }}"
 
   roles:
-    # Your code here
-    - update_packages
-    - nodejs_pm2
     - configure-server

@@ -1,6 +1,0 @@
----
-
-- name: "Update/Upgrade Packages"
-  apt:
-    upgrade: yes
-    update_cache: yes
