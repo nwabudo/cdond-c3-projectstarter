@@ -44,8 +44,9 @@ commands:
           name: Destroy environments
           when: on_fail
           command: |
+            set +e
             # Your code here
-            aws s3 rm s3://udapeople-<<parameters.workflow_id>> --recursive
+            aws s3 rm s3://udapeople-536577976564-<<parameters.workflow_id>> --recursive
             aws cloudformation delete-stack --stack-name "udapeople-frontend-<<parameters.workflow_id>>"
             aws cloudformation delete-stack --stack-name "udapeople-backend-<<parameters.workflow_id>>"
             
@@ -269,11 +270,6 @@ jobs:
 
       - install_ansible
       - install_awscli
-      - run:
-          name: Install dependencies
-          command: |
-            # Your code here
-            exit 1
       - run:
           name: Configure server
           command: |
