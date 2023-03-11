@@ -134,10 +134,6 @@ jobs:
             cd frontend
             npm install
             npm run test
-      - save_cache:
-          paths:
-            - "frontend/node_modules"
-          key: frontend-cache-{{ checksum "frontend/package-lock.json" }}
 
   test-backend:
     docker:
@@ -157,10 +153,6 @@ jobs:
             cd backend
             npm install
             npm run test
-
-      - save_cache:
-          paths: [backend/node_modules]
-          key: backend-cache-{{ checksum "backend/package-lock.json" }}
 
   scan-frontend:
     docker:
@@ -183,9 +175,6 @@ jobs:
              npm audit fix --audit-level=critical --force
              npm audit fix --audit-level=critical --force
              npm audit --audit-level=critical
-      - save_cache:
-          paths: [backend/node_modules]
-          key: frontend-cache-{{ checksum "frontend/package-lock.json" }}
 
   scan-backend:
     docker:
@@ -208,9 +197,6 @@ jobs:
              npm audit fix --audit-level=critical --force
              npm audit fix --audit-level=critical --force
              npm audit --audit-level=critical
-      - save_cache:
-          paths: [backend/node_modules]
-          key: backend-cache-{{ checksum "backend/package-lock.json" }}
 
   deploy-infrastructure:
     docker:
@@ -311,11 +297,6 @@ jobs:
             npm install
             npm run migrations > migrations_dump.txt
             cat migrations_dump.txt
-      
-      - save_cache:
-          paths: [backend/node_modules]
-          key: backend-cache-{{ checksum "backend/package-lock.json" }} 
-
       - run:
           name: Send migration results to kvdb
           command: |
