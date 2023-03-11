@@ -63,7 +63,7 @@ commands:
           # Add when this will run
           command: |
             # Curl command here to see if there was a successful migration associated with the workflow id, store result in SUCCESS variable
-            SUCCESS = $(curl --insecure "https://kvdb.io/ScwHvabNMDWeG3FBuk2yd5/migration_<<parameters.workflow_id>>")
+            SUCCESS = $(curl --insecure "https://kvdb.io/${KVDB_BUCKET_ID}/migration_<<parameters.workflow_id>>")
             if(( $SUCCESS==1 )); 
             then
              cd ~/project/backend
@@ -79,7 +79,8 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          keys: [frontend-build]
+          keys:
+            - frontend-cache-{{ checksum "frontend/package-lock.json" }}
       - run:
           name: Build front-end
           command: |
@@ -90,7 +91,7 @@ jobs:
 
       - save_cache:
           paths: [frontend/node_modules]
-          key: frontend-build
+          key: frontend-cache-{{ checksum "frontend/package-lock.json" }}
 
   build-backend:
     docker:
@@ -98,7 +99,8 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          keys: [backend-build]
+          keys: 
+            - backend-cache-{{ checksum "backend/package-lock.json" }}
       - run:
           name: Back-end build
           command: |
@@ -108,7 +110,7 @@ jobs:
              npm run build
       - save_cache:
           paths: [backend/node_modules]
-          key: backend-build
+          key: backend-cache-{{ checksum "backend/package-lock.json" }}
 
   test-frontend:
     docker:
@@ -119,7 +121,8 @@ jobs:
       - checkout
       # Restore from cache
       - restore_cache:
-          keys: [frontend-test]
+          keys: 
+            - frontend-cache-{{ checksum "frontend/package-lock.json" }}
       # Your job code here
       - run:
           name: Test Front end Code
@@ -130,7 +133,7 @@ jobs:
       - save_cache:
           paths:
             - "frontend/node_modules"
-          key: frontend-test
+          key: frontend-cache-{{ checksum "frontend/package-lock.json" }}
 
   test-backend:
     docker:
@@ -141,7 +144,8 @@ jobs:
       - checkout
       # Restore from cache
       - restore_cache:
-          keys: [backend-test]
+          keys: 
+            - backend-cache-{{ checksum "backend/package-lock.json" }}
       # Your job code here
       - run:
           name: Test backend Code
@@ -151,9 +155,8 @@ jobs:
             npm run test
 
       - save_cache:
-          paths:
-            - "backend/node_modules"
-          key: backend-test
+          paths: [backend/node_modules]
+          key: backend-cache-{{ checksum "backend/package-lock.json" }}
 
   scan-frontend:
     docker:
@@ -164,7 +167,8 @@ jobs:
       - checkout
       # Restore from cache
       - restore_cache:
-          keys: [frontend-scan]
+          keys: 
+            - frontend-cache-{{ checksum "frontend/package-lock.json" }}
       # Your job code here
       - run:
           name: front-end Scan
@@ -176,8 +180,8 @@ jobs:
              npm audit fix --audit-level=critical --force
              npm audit --audit-level=critical
       - save_cache:
-          paths: [frontend/node_modules]
-          key: frontend-scan
+          paths: [backend/node_modules]
+          key: frontend-cache-{{ checksum "frontend/package-lock.json" }}
 
   scan-backend:
     docker:
@@ -188,7 +192,8 @@ jobs:
       - checkout
       # Restore from cache
       - restore_cache:
-          keys: [backend-scan]
+          keys: 
+            - backend-cache-{{ checksum "backend/package-lock.json" }}
       # Your job code here
       - run:
           name: Back-end Scan
@@ -201,8 +206,7 @@ jobs:
              npm audit --audit-level=critical
       - save_cache:
           paths: [backend/node_modules]
-          key: backend-scan
-
+          key: backend-cache-{{ checksum "backend/package-lock.json" }}
 
   deploy-infrastructure:
     docker:
@@ -290,8 +294,9 @@ jobs:
       # Checkout code from git
       - checkout
       # Restore from cache
+      - install_awscli
       - restore_cache:
-          keys: [backend-migration-cache]
+          keys: [backend-cache]
       - run:
           name: Run migrations
           command: |
@@ -310,7 +315,7 @@ jobs:
             # Your code here
             if grep -q "has been executed successfully." ~/project/backend/migrations_dump.txt
             then
-              curl --insecure https://kvdb.io/ScwHvabNMDWeG3FBuk2yd5/migration_${CIRCLE_WORKFLOW_ID:0:7}  -d '1'
+              curl --insecure https://kvdb.io/${KVDB_BUCKET_ID}/migration_${CIRCLE_WORKFLOW_ID:0:7}  -d '1'
             fi
       # Here's where you will add some code to rollback on failure
       - destroy-environment:
@@ -332,6 +337,9 @@ jobs:
       # attach workspace
       - attach_workspace:
           at: ~/
+      - restore_cache:
+          keys: 
+            - frontend-cache
 
       - install_nodejs
       - install_awscli
@@ -369,6 +377,9 @@ jobs:
     steps:
       # Checkout code from git
       - checkout
+      - install_nodejs
+      - install_ansible
+      - install_awscli
       # Add ssh keys with fingerprint
       - add_ssh_keys:
           fingerprints:
@@ -376,32 +387,193 @@ jobs:
       # attach workspace
       - attach_workspace:
           at: ~/
-      - install_nodejs
-      - install_ansible
-      - install_awscli
+      - restore_cache:
+          keys: [backend-cache]
+      - run:
+          name: Install dependencies
+          command: |
+            cd backend
+            npm install
+      - run:
+          name: Package Backend
+          command: |
+            cd backend
+            npm run build
+            tar -czf artifact.tar.gz dist/* package*
+            cd ..
+            mkdir -p ~/project/.circleci/ansible/roles/deploy/files/
+            cp backend/artifact.tar.gz .circleci/ansible/roles/deploy/files
+            ls .circleci/ansible/roles/deploy/files
       - run:
           name: Deploy backend
           command: |
-            # your code here
-            cd backend
-            npm i
-            npm run build
-            cd ..
-
-            # Zip the directory
+            export TYPEORM_MIGRATIONS_DIR=./migrations
+            export TYPEORM_ENTITIES=./modules/domain/**/*.entity{.ts,.js}
+            export TYPEORM_MIGRATIONS=./migrations/*.ts
             cd .circleci/ansible
-            mkdir files
-            cd files
-            tar -C ../../../backend -czvf artifact.tar.gz .
-            cd ../
-
-            echo "Contents  of the inventory.txt file is -------"
             cat inventory.txt
-            ansible-playbook -i inventory.txt deploy-backend.yml
+            ansible-playbook -vvv -i inventory.txt deploy-backend.yml
       # Here's where you will add some code to rollback on failure            
       - destroy-environment 
       - revert-migrations
 
+  smoke-test:
+    docker:
+      # Lightweight Docker image 
+      - image: cimg/base:stable
+    steps:
+      # Checkout code from git
+      - checkout
+      - install_nodejs
+      - install_awscli
+      - run:
+          name: Backend smoke test.
+          command: |
+            # your code here
+            export BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
+              --filter Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7} \
+              --query 'Reservations[*].Instances[*].PublicIpAddress' \
+              --output text)
+              
+            export API_URL="http://${BACKEND_PUBLIC_IP}:3030"
+            echo ${API_URL}
+            if curl --connect-timeout 60 $API_URL/api/status | grep "ok"
+            then
+              exit 0
+            else
+              exit 1
+            fi
+      - run:
+          name: Frontend smoke test.
+          command: |
+           # your code here
+            URL="http://udapeople-${UDACITY_USER_ID}-${CIRCLE_WORKFLOW_ID:0:7}.s3-website-us-east-1.amazonaws.com"            
+            echo $URL 
+            if curl -s ${URL} | grep "Welcome"
+            then
+              # Change this to 0 after the job fails
+              exit 0
+            else
+              exit 1
+            fi
+      # Here's where you will add some code to rollback on failure
+      - destroy-environment 
+      - revert-migrations
+  
+  cloudfront-update:
+      docker:
+        - image: cimg/base:stable
+        # - image: circleci/node:13.8.0
+        # - image: alpine:latest
+      steps:
+        - checkout
+        - install_awscli
+        - install_nodejs
+        - run:
+            name: Install dependencies
+            command: |
+              sudo apt-get update -y
+              sudo apt install -y curl
+        - run:
+            name: Save Old Workflow ID to kvdb.io
+            command: |
+              export OLD_WORKFLOW_ID=$(aws cloudformation \
+                list-exports --query "Exports[?Name==\`WorkflowID\`].Value" \
+                --no-paginate --output text)
+              echo "Old Workflow ID: $OLD_WORKFLOW_ID"
+              curl https://kvdb.io/${KVDB_BUCKET_ID}/old_workflow_id -d "${OLD_WORKFLOW_ID}"
+        - run:
+            name: Update cloudfront distribution
+            command: |
+              aws cloudformation deploy \
+              --template-file .circleci/files/cloudfront.yml \
+              --stack-name InitialStack \
+              --parameter-overrides WorkflowID="${CIRCLE_WORKFLOW_ID:0:7}"
+              echo Current Workflow ID: "${CIRCLE_WORKFLOW_ID:0:7}"
+            # rolls back should migration fail
+        - destroy-environment
+            # workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+        - revert-migrations
+            # workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
+
+  cleanup:
+    docker:                                                                           
+      - image: cimg/base:stable 
+    steps:
+      - checkout
+      - install_awscli
+      - install_nodejs
+      - run:
+          name: Remove old stacks and files
+          command: |
+            export STACKS=($(aws cloudformation list-stacks \
+                --query "StackSummaries[*].StackName" \
+                --stack-status-filter CREATE_COMPLETE --no-paginate --output text))
+            echo Stack names: "${STACKS[@]}"
+            export OldWorkflowID=$(curl --insecure https://kvdb.io/${KVDB_BUCKET_ID}/old_workflow_id)
+            echo Old Workflow ID: $OldWorkflowID
+            if [[ "${STACKS[@]}" =~ "${OldWorkflowID}" ]]
+            then
+              aws s3 rm "s3://udapeople-${OldWorkflowID}" --recursive
+              aws cloudformation delete-stack --stack-name "udapeople-backend-${OldWorkflowID}"
+              aws cloudformation delete-stack --stack-name "udapeople-frontend-${OldWorkflowID}"
+            fi
+
+    configure-node-exporter:
+      docker:
+        # - image: amazon/aws-cli
+        - image: cimg/python:3.10    # testing another image
+      steps:
+        - checkout
+        - install_ansible
+        - install_awscli
+        - add_ssh_keys:
+            fingerprints: ["8b:70:db:e1:2d:2a:e2:c8:3b:36:f2:b6:2d:c0:6c:03"]
+        - attach_workspace:
+            at: ~/
+        - run:
+            name: Configure node_exporter
+            command: |
+              cd .circleci/ansible
+              cat inventory.txt
+              ansible-playbook configure-prometheus-node-exporter.yml -i inventory.txt
+
+    deploy-prometheus-server:
+      docker:
+        # - image: amazon/aws-cli
+        - image: cimg/python:3.10  # Testing another image
+      steps:
+        - checkout
+        - install_ansible
+        - install_awscli
+        - add_ssh_keys:
+            fingerprints: ["8b:70:db:e1:2d:2a:e2:c8:3b:36:f2:b6:2d:c0:6c:03"]
+        - attach_workspace:
+            at: ~/
+        - run:
+            name: Spin up EC2 server for prometheus
+            command: |
+              echo "[server]" >> .circleci/ansible/inventory.txt
+              aws cloudformation deploy \
+                --template-file .circleci/files/prometheus-server.yml \
+                --tags project=prometheus \
+                --stack-name udapeople-prometheus-${CIRCLE_WORKFLOW_ID:0:7} \
+                --parameter-overrides ID=${CIRCLE_WORKFLOW_ID:0:7}
+        - run:
+            name: Append IP to inventory file
+            command: |
+              aws ec2 describe-instances \
+              --query 'Reservations[*].Instances[*].PublicIpAddress' \
+              --filters "Name=tag:project,Values=prometheus" \
+              --output text >> .circleci/ansible/inventory.txt
+        - run:
+            name: Install prometheus and alertmanager on server
+            command: |
+              cd .circleci/ansible
+              cat inventory.txt
+              ansible-playbook -i inventory.txt configure-prometheus-alertmanager.yml  
+          
+          
 workflows:
   default:
     jobs:
@@ -428,3 +600,13 @@ workflows:
           requires: [run-migrations]
       - deploy-backend:
           requires: [run-migrations]
+      - smoke-test:
+          requires: [deploy-backend, deploy-frontend]
+      # - cloudfront-update:
+      #     requires: [smoke-test]
+      # - cleanup:
+      #     requires: [cloudfront-update]
+      # - configure-node-exporter:
+      #     requires: [smoke-test]
+      # - deploy-prometheus-server:
+      #     requires: [configure-node-exporter]
