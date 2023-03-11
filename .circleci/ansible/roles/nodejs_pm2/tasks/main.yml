@@ -1,6 +1,5 @@
 
 ---
----
 - name: Install Node.js 14.x
   apt:
     update_cache: yes
