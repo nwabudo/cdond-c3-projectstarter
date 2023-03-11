@@ -67,8 +67,8 @@ commands:
           when: on_fail
           # Add when this will run
           command: |
-            # Curl command here to see if there was a successful migration associated with the workflow id, store result in SUCCESS variable
-            SUCCESS = $(curl --insecure https://kvdb.io/${KVDB_BUCKET_ID}/migration_<<parameters.workflow_id>>)
+            SUCCESS=$(curl --insecure  https://kvdb.io/${KVDB_BUCKET_ID}/migration_<< parameters.Workflow_id >>)
+            # Logic for reverting the database state
             if (( $SUCCESS == 1 )); then
               cd ~/project/backend
               npm install
@@ -201,15 +201,11 @@ jobs:
   deploy-infrastructure:
     docker:
       # Docker image here that supports AWS CLI
-      - image: amazon/aws-cli
+      - image: cimg/python:3.10
     steps:
       # Checkout code from git
       - checkout
-      - run:
-          name: Install Dependencies
-          command: |
-            yum install -y tar gzip
-
+      - install_awscli
       - run:
           name: Ensure back-end infrastructure exists
           command: |
@@ -250,10 +246,12 @@ jobs:
   configure-infrastructure:
     docker:
       # Docker image here that supports Ansible
-      - image: cimg/base:stable
+      - image: cimg/python:3.10
     steps:
       # Checkout code from git
       - checkout
+      - install_ansible
+      - install_awscli
       # Add ssh keys with fingerprint
       - add_ssh_keys:
           fingerprints:
@@ -261,9 +259,6 @@ jobs:
       # attach workspace
       - attach_workspace:
           at: ~/
-
-      - install_ansible
-      - install_awscli
       - run:
           name: Configure server
           command: |
@@ -315,21 +310,23 @@ jobs:
 
   deploy-frontend:
     docker:
-      # Docker image here that supports AWS CLI
-      - image: cimg/base:stable
+      - image: cimg/python:3.10
     steps:
       # Checkout code from git
       - checkout
+      - install_awscli
+      - install_nodejs
       - restore_cache:
           keys: 
             - frontend-cache-{{ checksum "frontend/package-lock.json" }}
-
-      - install_nodejs
-      - install_awscli
+      - run:
+          name: Install dependencies
+          command: |
+            cd frontend
+            npm install      
       - run:
           name: Get backend url
           command: |
-            # your code here
             export BACKEND_IP=$(aws ec2 describe-instances \
             --query 'Reservations[*].Instances[*].PublicIpAddress' \
             --filter Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7} \
@@ -342,7 +339,6 @@ jobs:
       - run:
           name: Deploy frontend objects
           command: |
-            # your code here
             cd frontend
             npm run build
             tar -czvf artifact-"${CIRCLE_WORKFLOW_ID:0:7}".tar.gz dist
@@ -355,13 +351,15 @@ jobs:
   deploy-backend:
     docker:
       # Docker image here that supports Ansible
-      - image: cimg/base:stable
+      - image: cimg/python:3.10
     steps:
       # Checkout code from git
       - checkout
-      - install_nodejs
       - install_ansible
       - install_awscli
+      - install_nodejs
+      - restore_cache:
+          keys: [backend-cache]
       # Add ssh keys with fingerprint
       - add_ssh_keys:
           fingerprints:
@@ -369,8 +367,6 @@ jobs:
       # attach workspace
       - attach_workspace:
           at: ~/
-      - restore_cache:
-          keys: [backend-cache]
       - run:
           name: Install dependencies
           command: |
@@ -382,16 +378,17 @@ jobs:
             cd backend
             npm run build
             tar -czf artifact.tar.gz dist/* package*
+            
             cd ..
-            mkdir -p ~/project/.circleci/ansible/roles/deploy/files/
             cp backend/artifact.tar.gz .circleci/ansible/roles/deploy/files
-            ls .circleci/ansible/roles/deploy/files
+            ls -al .circleci/ansible/roles/deploy/files
       - run:
           name: Deploy backend
           command: |
             export TYPEORM_MIGRATIONS_DIR=./migrations
             export TYPEORM_ENTITIES=./modules/domain/**/*.entity{.ts,.js}
             export TYPEORM_MIGRATIONS=./migrations/*.ts
+            
             cd .circleci/ansible
             cat inventory.txt
             ansible-playbook -vvv -i inventory.txt deploy-backend.yml
