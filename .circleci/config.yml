@@ -31,10 +31,7 @@ commands:
       - run: 
           name: Install Ansible
           command: |
-            sudo apt update
-            sudo apt install software-properties-common -y
-            sudo add-apt-repository --yes --update ppa:ansible/ansible
-            sudo apt install ansible -y
+            python3 -m pip install --user ansible
 
   destroy-environment:
     description: Destroy back-end and front-end cloudformation stacks given a workflow ID.
@@ -377,11 +374,15 @@ jobs:
           command: |
             cd backend
             npm run build
+            ls -al .
+
             tar -czf artifact.tar.gz dist/* package*
+            ls -al .
             
             cd ..
+            pwd
             cp backend/artifact.tar.gz .circleci/ansible/roles/deploy/files
-            ls -al .circleci/ansible/roles/deploy/files
+            ls -al .circleci/ansible/roles/deploy/files/
       - run:
           name: Deploy backend
           command: |
