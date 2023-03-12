@@ -2,7 +2,7 @@ version: 2.1
 
 commands:
   install_awscli:
-    description: Install AWSCLI-v2, TAR, GZIP & CURL
+    description: Install aws
     steps:
       - run:
           name: Install AWSCLI-v2, TAR, GZIP & CURL
@@ -11,6 +11,7 @@ commands:
             curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
             unzip awscliv2.zip
             sudo ./aws/install
+            
   install_ansible:
     description: Install Ansible
     steps:
@@ -31,6 +32,7 @@ commands:
             # Use Node version manager to use Node.js v13.8.0
             sudo npm install --global n
             sudo n 13.8.0
+  
   destroy-environment:
     description: Destroy back-end and front-end cloudformation stacks given a workflow ID.
     parameters:
@@ -45,14 +47,12 @@ commands:
             echo Destroying environment <<parameters.Workflow_id>>
             # Destroy frontend bucket
             aws s3 rm s3://udapeople-<<parameters.Workflow_id>> --recursive
+
             # Destroy frontend stack
-            aws cloudformation delete-stack --stack-name udapeople-frontend-${CIRCLE_WORKFLOW_ID:0:7}
-            # Delete backend stack
-            aws cloudformation delete-stack --stack-name udapeople-backend-${CIRCLE_WORKFLOW_ID:0:7}
-            # # Destroy frontend stack
-            # aws cloudformation delete-stack --stack-name udapeople-frontend-<< parameters.Workflow_id >>
-            # # Destroy backend stack
-            # aws cloudformation delete-stack --stack-name udapeople-backend-<< parameters.Workflow_id >>
+            aws cloudformation delete-stack --stack-name udapeople-frontend-<< parameters.Workflow_id >>
+            # Destroy backend stack
+            aws cloudformation delete-stack --stack-name udapeople-backend-<< parameters.Workflow_id >>
+
   revert-migrations:
     description: Revert the last migration, if any were executed during the current workflow
     parameters:
