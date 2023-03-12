@@ -372,8 +372,8 @@ jobs:
             URL=http://udapeople-${CIRCLE_WORKFLOW_ID:0:7}.s3-website.${AWS_DEFAULT_REGION}.amazonaws.com
             if curl -s $URL | grep "Welcome"
             then
-              # Intentional error removed
-              exit 0
+              # Intentional error added
+              exit 1
             else
               exit 1
             fi
@@ -401,7 +401,9 @@ jobs:
             export OLD_WORKFLOW_ID=$(aws cloudformation \
               list-exports --query "Exports[?Name==\`WorkflowID\`].Value" \
               --no-paginate --output text)
+
             echo "Old Workflow ID: $OLD_WORKFLOW_ID"
+
             curl https://kvdb.io/${KVDB_BUCKET_ID}/old_workflow_id -d "${OLD_WORKFLOW_ID}"
       - run:
           name: Update cloudfront distribution
@@ -410,6 +412,7 @@ jobs:
             --template-file .circleci/files/cloudfront.yml \
             --stack-name InitialStack \
             --parameter-overrides WorkflowID="${CIRCLE_WORKFLOW_ID:0:7}"
+
             echo Current Workflow ID: "${CIRCLE_WORKFLOW_ID:0:7}"
           # rolls back should migration fail
       - destroy-environment
@@ -427,19 +430,7 @@ jobs:
       - run:
           name: Remove old stacks and files
           command: |
-            #!/bin/bash -eo pipefail
             set +e
-
-            STACKS=($(aws cloudformation list-stacks \
-                --query "StackSummaries[*].StackName" \
-                --stack-status-filter CREATE_COMPLETE --no-paginate --output text))
-
-            if [ -z "${STACKS[@]}" ]; then
-                echo "No stack names found"
-                exit 0
-            fi
-
-            echo "Stack names: ${STACKS[@]}"
 
             OldWorkflowID=$(curl --insecure https://kvdb.io/${KVDB_BUCKET_ID}/old_workflow_id)
 
@@ -450,53 +441,22 @@ jobs:
 
             echo "Old Workflow ID: $OldWorkflowID"
 
-            if [[ "${STACKS[@]}" =~ "${OldWorkflowID}" ]]
-            then
-                aws s3 rm "s3://udapeople-${OldWorkflowID}" --recursive
-                if [ $? -ne 0 ]; then echo "AWS command failed"; fi
+            STACKS=($(aws cloudformation list-stacks \
+                --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE
+                --query "StackSummaries[?contains(StackName, '$OldWorkflowI')].StackName" --no-paginate --output text))
 
-                aws cloudformation delete-stack --stack-name "udapeople-backend-${OldWorkflowID}"
-                if [ $? -ne 0 ]; then echo "AWS command failed"; fi
-              
-                aws cloudformation delete-stack --stack-name "udapeople-frontend-${OldWorkflowID}"
-                if [ $? -ne 0 ]; then echo "AWS command failed"; fi
+            if [ -z "${STACKS[@]}" ]; then
+                echo "No stack names found"
+                exit 0
             fi
 
-  # deploy-prometheus-server:
-  #   docker:
-  #     - image: cimg/python:3.10  # Testing another image
-  #   steps:
-  #     - checkout
-  #     - install_ansible
-  #     - install_awscli
-  #     - add_ssh_keys:
-  #         fingerprints: ["cf:f2:2b:fc:3a:b6:d6:bd:08:f2:da:09:b8:67:a2:ab"]
+            echo "Stack names: ${STACKS[@]}"
 
-  #     - attach_workspace:
-  #         at: ~/
-  #     - run:
-  #         name: Spin up EC2 server for prometheus
-  #         command: |
-  #           echo "[server]" >> .circleci/ansible/inventory.txt
-  #           aws cloudformation deploy \
-  #             --template-file .circleci/files/prometheus-server.yml \
-  #             --tags project=prometheus \
-  #             --stack-name udapeople-prometheus-${CIRCLE_WORKFLOW_ID:0:7} \
-  #             --parameter-overrides ID=${CIRCLE_WORKFLOW_ID:0:7}
-  #     - run:
-  #         name: Append IP to inventory file
-  #         command: |
-  #           aws ec2 describe-instances \
-  #           --query 'Reservations[*].Instances[*].PublicIpAddress' \
-  #           --filters "Name=tag:project,Values=prometheus" \
-  #           --output text >> .circleci/ansible/inventory.txt
-  #     - run:
-  #         name: Install prometheus and alertmanager on server
-  #         command: |
-  #           cd .circleci/ansible
-  #           cat inventory.txt
-  #           ansible-playbook -i inventory.txt configure-prometheus-alertmanager.yml  
-          
+            aws s3 rm "s3://udapeople-${OldWorkflowID}" --recursive
+            if [ $? -ne 0 ]; then echo "AWS command failed"; else echo "AWS command succeeded"; fi
+
+            aws cloudformation delete-stack --stack-name $STACKS
+            if [ $? -ne 0 ]; then echo "AWS command failed"; else echo "AWS command succeeded"; fi          
           
 workflows:
   default:
