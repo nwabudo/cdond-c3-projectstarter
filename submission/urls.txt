@@ -1,0 +1,22 @@
+# URL For the Project
+
+## URL-O1: GitHub Repo
+
+<https://github.com/nwabudo/cdond-c3-projectstarter>
+
+## URL-O2: S3 Bucket URL
+
+<http://udapeople-3723cc9.s3.amazonaws.com/index.html>
+
+## URL-O3: CloudFront
+
+<http://d1h3j5wuci1mh4.cloudfront.net>
+
+## URL-O4: Evidence of healthy back-end application. [URL04]
+
+<http://ec2-54-164-129-120.compute-1.amazonaws.com:3030/api/status>
+
+## Evidence of Prometheus Server. [URL05]
+
+<http://ec2-18-207-139-238.compute-1.amazonaws.com:9090/targets>
+
