@@ -23,6 +23,12 @@
         name: python3
         update_cache: yes
 
+    - name: "update and upgrade packages"
+      shell: |
+        sudo apt upgrade -y
+        sudo apt-get update -y
+        sudo apt autoremove
+
   # Get the environment variables from CircleCI and add to the EC2 instance
   environment:
     - NODE_ENV: production
@@ -40,4 +46,4 @@
 
   roles:
     - configure-server
-    # - configure-prometheus-node-exporter
+    - configure-prometheus-node-exporter
