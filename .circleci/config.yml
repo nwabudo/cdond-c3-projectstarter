@@ -428,8 +428,6 @@ jobs:
       - run:
           name: Remove old stacks and files
           command: |
-            set +e
-
             OldWorkflowID=$(curl --insecure https://kvdb.io/${KVDB_BUCKET_ID}/old_workflow_id)
             if [ -z "$OldWorkflowID" ]; then
                 echo "Old workflow ID not found"
@@ -450,14 +448,16 @@ jobs:
             if [[ "${STACKS[@]}" =~ "${OldWorkflowID}" ]]
             then
               aws s3 rm "s3://udapeople-${OldWorkflowID}" --recursive
-              if [ $? -ne 0 ]; then echo "AWS command failed"; else echo "AWS command succeeded"; fi
+              echo "AWS s3 bucket command succeeded"
 
               aws cloudformation delete-stack --stack-name "udapeople-backend-${OldWorkflowID}"
-              if [ $? -ne 0 ]; then echo "AWS command failed"; else echo "AWS command succeeded"; fi
+              echo "AWS backend stack deletion initiated"
               
               aws cloudformation delete-stack --stack-name "udapeople-frontend-${OldWorkflowID}"
-              if [ $? -ne 0 ]; then echo "AWS command failed"; else echo "AWS command succeeded"; fi
-            fi      
+              echo "AWS frontend stack deletion initiated"
+            else
+              echo "Fetched Stack Names does not contain the Old Workflow Id"
+            fi
           
 workflows:
   default:
