@@ -416,9 +416,7 @@ jobs:
             echo Current Workflow ID: "${CIRCLE_WORKFLOW_ID:0:7}"
           # rolls back should migration fail
       - destroy-environment
-          # workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
       - revert-migrations
-          # workflow_id: ${CIRCLE_WORKFLOW_ID:0:7}
 
   cleanup:
     docker:                                                                           
@@ -433,30 +431,33 @@ jobs:
             set +e
 
             OldWorkflowID=$(curl --insecure https://kvdb.io/${KVDB_BUCKET_ID}/old_workflow_id)
-
             if [ -z "$OldWorkflowID" ]; then
                 echo "Old workflow ID not found"
                 exit 0
             fi
+            echo "Old Workflow ID: $OldWorkflowID"  
 
-            echo "Old Workflow ID: $OldWorkflowID"
-
-            STACKS=($(aws cloudformation list-stacks \
-                --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE
-                --query "StackSummaries[?contains(StackName, '$OldWorkflowI')].StackName" --no-paginate --output text))
-
+            export STACKS=($(aws cloudformation list-stacks \
+                --query "StackSummaries[*].StackName" \
+                --stack-status-filter CREATE_COMPLETE --no-paginate --output text))
+            
+            echo Stack names: "${STACKS[@]}"
             if [ -z "${STACKS[@]}" ]; then
                 echo "No stack names found"
                 exit 0
-            fi
+            fi            
 
-            echo "Stack names: ${STACKS[@]}"
+            if [[ "${STACKS[@]}" =~ "${OldWorkflowID}" ]]
+            then
+              aws s3 rm "s3://udapeople-${OldWorkflowID}" --recursive
+              if [ $? -ne 0 ]; then echo "AWS command failed"; else echo "AWS command succeeded"; fi
 
-            aws s3 rm "s3://udapeople-${OldWorkflowID}" --recursive
-            if [ $? -ne 0 ]; then echo "AWS command failed"; else echo "AWS command succeeded"; fi
-
-            aws cloudformation delete-stack --stack-name $STACKS
-            if [ $? -ne 0 ]; then echo "AWS command failed"; else echo "AWS command succeeded"; fi          
+              aws cloudformation delete-stack --stack-name "udapeople-backend-${OldWorkflowID}"
+              if [ $? -ne 0 ]; then echo "AWS command failed"; else echo "AWS command succeeded"; fi
+              
+              aws cloudformation delete-stack --stack-name "udapeople-frontend-${OldWorkflowID}"
+              if [ $? -ne 0 ]; then echo "AWS command failed"; else echo "AWS command succeeded"; fi
+            fi      
           
 workflows:
   default:
