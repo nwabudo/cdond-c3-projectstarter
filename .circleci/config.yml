@@ -372,8 +372,8 @@ jobs:
             URL=http://udapeople-${CIRCLE_WORKFLOW_ID:0:7}.s3-website.${AWS_DEFAULT_REGION}.amazonaws.com
             if curl -s $URL | grep "Welcome"
             then
-              # Intentional error added
-              exit 1
+              # Intentional error removed
+              exit 0
             else
               exit 1
             fi
